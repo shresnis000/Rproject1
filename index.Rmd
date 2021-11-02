@@ -1,0 +1,138 @@
+---
+title: 'Project 1: Wrangling, Exploration, Visualization'
+author: "SDS322E"
+date: ''
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document:
+    toc: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center", warning = F, message = F,
+tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
+```
+
+## Data Wrangling, Exploration, Visualization
+
+### Name and EID here
+
+#### Introduction 
+
+*How important are critic's reviews to the sales of a video game? In this project, I wanted analyze this question. specifically focusing on PS4 games as it is one of the largest platform for gaming. My first dataset is called the criticscores. It contains the name of the game, the console it was released on,  the date of release, the metacritic score of a game, which is the aggregate score given to the game based on reviews from gaming journalists, and the game's user score. My second dataset will be called the PS4sales which contains the name of the game, the year it was released, it's genre, the publisher, and its sales in North America, Japan, Europe and the rest of the world.  I picked these datasets because I wanted to analyze the effect of critical scores oo the sales of a video game; furthermore, I also wanted to analyze how important a negative score on other platforms is to the game's sales on PS4 and if a particular genre or publisher was more reliant on critic scores than other genres or publisher.*
+
+Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
+
+```{R}
+# read your datasets in here, e.g., with read_csv()
+library(tidyverse)
+PS4sales <- read.csv('PS4_GamesSales.csv')
+criticscores <- read.csv('result.csv')
+
+```
+
+#### Tidying: Reshaping
+
+If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
+
+```{R}
+# your tidying code (if applicable; can also wait until wrangling section)
+criticscores %>% select(!date&!userscore) %>% filter(console=='PS4'|console=='XONE') %>% pivot_wider(names_from = console, values_from = metascore) %>% na.omit() -> criticscorestidy
+
+nrow(criticscores)
+nrow(criticscorestidy)
+
+```
+
+*We modify the criticscores dataset to drop the date of release and the underscore, as they were irrelevant to the type of analysis we were going to focus on. We filter the data, so only the games that have a score for PS4 or Xbox one are left, as these consoles are from the same generation and will therefore have the most in common in terms of games. We then tidy the dataset so all the different scores for the different platforms a particular game was released on would be put on a single row, which also means that the number of unique ID is equal to the number of observations. Finally we remove the rows containing NA to remove all the exclusives as we only want to focus on title that were released on both platforms. We also observe that the number of rows in this dataset went down from 15647 to 581.*
+
+#### Joining/Merging
+
+```{R}
+# your joining code
+mergedGAmes <- inner_join(PS4sales,criticscorestidy, by=c('Game'='name'))
+# your joining code
+nrow(criticscorestidy) #observations for criticscorestidy; also the # of unique id
+criticscorestidy %>% summarize(n_distinct(name)) #proof
+nrow(PS4sales)         #observations for PS4sales; also the # of unique id
+PS4sales %>% summarize(n_distinct(Game))  #proof
+nrow(mergedGAmes)      #observations for merged dataset; also the # of unique id
+mergedGAmes %>% summarize(n_distinct(Game))  #proof
+
+anti_join(criticscorestidy,mergedGAmes, by=c('name'='Game')) %>% glimpse()  #games that are in criticscoretidy, but not in PS4sales
+anti_join(PS4sales,mergedGAmes, by='Game') %>% glimpse()                    #games that are in PS4sales but not in criticscoretidy
+
+```
+
+*We need to have the sales figures and the critic scores of the games to do our analysis; therefore, we should use an inner_join to ensure that we only have games that are in both datasets. As we can see from our code, there were 581 observation in the criticscorestidy data, and 1034 observation in the PS4 sales dataset, while there were only 226 observations in the merged dataset. We have already ensured that both of these datasets only have unique IDs which we used to join them, so the number of unique observations equals the total number of observation for all of the datasets mentioned above. We can therefore conclude that there were 335 games in the criticscorestidy dataset that weren't in the PS4 sales dataset, such as Diablo 3, and there were 808 games in the PS4 sales data, such as exclusives like Uncharted 4 or God of War, set that weren't in the criticsorestidy dataset. We see that our merged dataset is a lot smaller than our original dataset. A potential problem with our merged data is that we can't observe how a game that is exclusive to the PS4 are reliant on critics score.*
+
+####  Wrangling
+
+```{R}
+# your wrangling code
+
+library(kableExtra)
+mG2 <- mergedGAmes %>% mutate(NApercent = North.America/Global) %>% mutate(Eupercent = Europe/Global) %>% mutate(JPpercent = Japan/Global) %>% mutate(otherpercent = Rest.of.World/Global) %>% select((!North.America)&(!Europe)&(!Japan)&(!Rest.of.World))
+#these mutations gives us the percentage of sales made in NA, Europe, Japan, and the rest of the world for each game, and drops the total number of sales made in these regions as they are irrelevant
+
+
+# your wrangling code
+mG2 %>% mutate(length=str_length(Game)) %>% filter(length==max(length))   #this tells us that the most wordy game is Teenage Mutant Ninja Turtles: Mutants in Manhattan
+ 
+ 
+
+# your wrangling code
+mG2 %>% filter(Eupercent>0.5) %>% group_by(Genre,Publisher) %>% summarize(mean(PS4),sd(PS4),median(PS4), max(PS4)) %>% na.omit() %>% kbl()  #this gives us the mean, standard deviation, and median metacritic score for the PS4 versions of games that were primarily popular in Europe. It is also grouped by genre and publisher, if a publisher has only made 1 game of a particular genre they are not included.
+
+
+avescoreacrossplatform <- function(x,y) {          #this function will give us the average score of the games across the two platforms
+   0.5*(mean(x)+mean(y))
+}
+
+mG2 %>% group_by(Publisher) %>% summarize(Averagescore=avescoreacrossplatform(PS4,XONE)) %>% na.omit()  #according to the normal distribution, there will be 97.5% chance that the game published by these publisher will have a higher score than the ones presented below. Of course, since the sample size for these publisher's game is usually pretty small it might not be very acurate.
+
+#categorical data
+mG2 %>% group_by(Genre) %>% summarize(n=n()) %>% arrange(desc(n))    
+mG2 %>% group_by(Publisher) %>% summarize(n=n()) %>% arrange(desc(n))
+```
+
+Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+*It's interesting that Konami and Square Enix have genres that are primarily popular in Europe even though most of their games have a very distinct Japanese style to them. *
+
+
+#### Visualizing
+
+```{R}
+# your plot 1
+ggplot(data=mG2, aes(x=PS4,y=Global, color=XONE))+geom_point() + geom_smooth() + xlab('PS4 metacritic score') + ylab('Global sales(in millions)') + ggtitle("Global Sales of Games vs their metacritic score") + theme_minimal() + scale_y_continuous(n.breaks=10)
+```
+
+Your discussion of plot 1
+*From this plot, we can see that the relationship between the PS4 metacritic score of a game and the global sales of that game is not linear. In fact, there is little to no relationship until the game hits a score of around 70, which makes sense to me as most people seem to consider 70 to be decent and anyting less to be bad, and not worth their time even though 50 should mean that it is average. Thus explaining the low amount of sales for games below the score of 70 except for some outliers. We can also see that the trend on Xbox one scores is the same, as in we can use the Xbox one metacritic score to determine the global sales for PS4 which is as expected as most multiplatform games are unlikely to have a staggering difference in critical reception*
+
+```{R}
+# your plot 2
+ggplot(data=mG2, aes(x=Genre))+geom_bar(aes(y=PS4),stat='summary',fun=mean) + xlab('Genre') + ylab('Average metacritic score') + theme(axis.text.x = element_text(angle=45, hjust=1), legend.position="none") + ggtitle("The distribution of Metacritic score accross genres") + scale_y_continuous(n.breaks=10)
+```
+
+Your discussion of plot 2
+*We can see in this plot that the average metacritic score for most genres seems to be relatively the same.*
+
+```{R}
+# your plot 3
+ggplot(data=mG2, aes(x=Genre))+geom_bar(aes(y=Global),stat='summary',fun=mean) + xlab('Genre') + ylab('Average global sales') + theme(axis.text.x = element_text(angle=45, hjust=1), legend.position="none") + ggtitle("The distribution of sales accross genres") + scale_y_continuous(n.breaks=10)
+
+```
+
+Your discussion of plot 3
+
+*From this plot we see that even though the average metacritic score is the relatively the same for most genres, the average global sales seem to have much more drastic differences between genres. This naturally suggests that some genres, such as shooters, sports and action games are much more likely to make a sales regardless of thier reviews compared to the other genres. It's also likely that the some genres, such as strategy, are much less likely to gain traction despite good reviews.* 
+
+
+
+
+
